@@ -26,7 +26,8 @@ module uart_controller (
   logic [7:0] data_buffer;
   logic [6:0] count_tx = 7'b0;
   logic [6:0] count_rx = 7'b0;
-  logic parity = 0;
+  logic parity_tx = 0;
+  logic parity_rx = 0;
   
   always_ff @(posedge clk) begin
     if (state_tx == IDLE && tx_data_valid && tx_data_ready) begin
@@ -38,8 +39,17 @@ module uart_controller (
   
   always_ff @(posedge clk) begin
     if (state_tx == IDLE && tx_data_valid && tx_data_ready) begin
-      parity <= ^tx_data;
+      parity_tx <= ^tx_data;
     end
+  end
+  
+  always_ff @(posedge clk) begin
+    case (state_tx)
+      START   : tx_uart <= 1'b0;
+      ACTIVE  : tx_uart <= data_buffer[0];
+      PARITY  : tx_uart <= parity_tx;
+      default : tx_uart <= 1'b1;
+    endcase
   end
   
   always_ff @(posedge clk) begin
