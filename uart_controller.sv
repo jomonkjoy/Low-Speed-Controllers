@@ -44,6 +44,14 @@ module uart_controller (
   end
   
   always_ff @(posedge clk) begin
+    if (reset) begin
+      tx_data_ready <= 1'b0;
+    end else begin
+      tx_data_ready <= state_tx == IDLE;
+    end
+  end
+  
+  always_ff @(posedge clk) begin
     case (state_tx)
       START   : tx_uart <= 1'b0;
       ACTIVE  : tx_uart <= data_buffer[0];
