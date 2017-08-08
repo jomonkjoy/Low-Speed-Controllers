@@ -7,39 +7,40 @@ module uart_controller (
   output logic       tx_data_ready,
   input  logic       tx_data_valid,
   input  logic [7:0] tx_data,
+  output logic       rx_data_error,
   output logic       rx_data_valid,
-  output logic [7:0] rx_data,
-  output logic       busy
+  output logic [7:0] rx_data
   );
   
   typedef enum {
     IDLE,
-    START,
     ACTIVE,
-    PARITY,
-    STOP,
     DONE
   } state_type;
   state_type state_tx = IDLE;
   state_type state_rx = IDLE;
   
-  logic [7:0] data_buffer;
-  logic [6:0] count_tx = 7'b0;
-  logic [6:0] count_rx = 7'b0;
-  logic parity_tx = 0;
-  logic parity_rx = 0;
+  logic [10:0] tx_data_buffer = {11{1'b1}};
+  logic [10:0] rx_data_buffer = {11{1'b1}};
+  
+  localparam COUNT_TX = 16*11;
+  localparam COUNT_RX = 16*10;
+  localparam COUNT_WIDTH = $clog2(COUNT_TX);
+  
+  logic [COUNT_WIDTH-1:0] count_tx = {COUNT_WIDTH{1'b0}};
+  logic [COUNT_WIDTH-1:0] count_rx = {COUNT_WIDTH{1'b0}};
+  
+  logic tx_parity;
+  logic rx_parity;
+  
+  assign tx_parity = parity_en ? ^tx_data : 1'b1;
+  assign rx_parity = ^rx_data;
   
   always_ff @(posedge clk) begin
     if (state_tx == IDLE && tx_data_valid && tx_data_ready) begin
-      data_buffer <= tx_data;
-    end else if (state_tx == ACTIVE && count_tx[2:0] == 3'b111) begin
-      data_buffer <= {1'b0,data_buffer[7:1]};
-    end
-  end
-  
-  always_ff @(posedge clk) begin
-    if (state_tx == IDLE && tx_data_valid && tx_data_ready) begin
-      parity_tx <= ^tx_data;
+      tx_data_buffer <= {1'b1,tx_parity,tx_data,1'b0};
+    end else if (state_tx == ACTIVE && count_tx[3:0] == 4'hF) begin
+      tx_data_buffer <= {1'b1,tx_data_buffer[7:1]};
     end
   end
   
@@ -51,69 +52,87 @@ module uart_controller (
     end
   end
   
-  always_ff @(posedge clk) begin
-    case (state_tx)
-      START   : tx_uart <= 1'b0;
-      ACTIVE  : tx_uart <= data_buffer[0];
-      PARITY  : tx_uart <= parity_tx;
-      default : tx_uart <= 1'b1;
-    endcase
-  end
+  assign tx_uart = tx_data_buffer[0];
   
+  // state-machine for UART-TX
   always_ff @(posedge clk) begin
     if (reset) begin
       state_tx <= IDLE;
-      count_tx <= 0;
+      count_tx <= {COUNT_WIDTH{1'b0}};
     end else begin
       case (state_tx)
         IDLE : begin
           if (tx_data_valid && tx_data_ready) begin
-            state_tx <= START;
-          end
-        end
-        START : begin
-          if (count_tx >= 15) begin
             state_tx <= ACTIVE;
-            count_tx <= 0;
-          end else begin
-            count_tx <= count_tx + 1;
           end
         end
         ACTIVE : begin
-          if (count_tx >= 127) begin
-            state_tx <= parity_en ? PARITY : STOP;
-            count_tx <= 0;
-          end else begin
-            count_tx <= count_tx + 1;
-          end
-        end
-        PARITY : begin
-          if (count_tx >= 15) begin
-            state_tx <= STOP;
-            count_tx <= 0;
-          end else begin
-            count_tx <= count_tx + 1;
-          end
-        end
-        STOP : begin
-          if (count_tx >= 15) begin
+          if (count_tx >= COUNT_TX-1) begin
             state_tx <= DONE;
-            count_tx <= 0;
+            count_tx <= {COUNT_WIDTH{1'b0}};
           end else begin
             count_tx <= count_tx + 1;
           end
         end
         DONE : begin
-          if (count_tx >= 15) begin
-            state_tx <= IDLE;
-            count_tx <= 0;
-          end else begin
-            count_tx <= count_tx + 1;
-          end
+          state_tx <= IDLE;
+          count_tx <= {COUNT_WIDTH{1'b0}};
         end
         default : begin
           state_tx <= IDLE;
-          count_tx <= 0;
+          count_tx <= {COUNT_WIDTH{1'b0}};
+        end
+      endcase
+    end
+  end
+  
+  always_ff @(posedge clk) begin
+    if (state_rx == IDLE) begin
+      rx_data_buffer <= {rx_uart,rx_data_buffer[10:1]};
+    end else if (state_rx == ACTIVE && count_tx[3:0] == 4'hF) begin
+      rx_data_buffer <= {rx_uart,rx_data_buffer[10:1]};
+    end
+  end
+  
+  assign rx_data = rx_data_buffer[8:1];
+  
+  always_ff @(posedge clk) begin
+    if (reset) begin
+      rx_data_valid <= 1'b0;
+      rx_data_error <= 1'b0;
+    end else begin
+      rx_data_valid <= state_rx == DONE;
+      rx_data_error <= rx_parity == rx_data_buffer[9];
+    end
+  end
+  
+  // state-machine for UART-RX
+  always_ff @(posedge clk) begin
+    if (reset) begin
+      state_rx <= IDLE;
+      count_rx <= {COUNT_WIDTH{1'b0}};
+    end else begin
+      case (state_rx)
+        IDLE : begin
+          if (rx_data_buffer == 11'hFC0) begin
+            state_rx <= ACTIVE;
+          end
+        end
+        ACTIVE : begin
+          if (count_rx >= COUNT_RX-1) begin
+            state_rx <= DONE;
+            count_rx <= {COUNT_WIDTH{1'b0}};
+          end else begin
+            count_rx <= count_rx + 1;
+          end
+        end
+        DONE : begin
+          state_rx <= IDLE;
+          count_rx <= {COUNT_WIDTH{1'b0}};
+        end
+        default : begin
+          state_rx <= IDLE;
+          count_rx <= {COUNT_WIDTH{1'b0}};
         end
       endcase
     end
