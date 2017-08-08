@@ -46,14 +46,30 @@ module spi_controller #(
   
   localparam INIT_CYCLE = 16;
   localparam COMMAND_CYCE = 8;
-  localparam COUNT_WIDTH = 16;
+  localparam COUNT_WIDTH = 11;
   
   logic [COUNT_WIDTH-1:0] count = {COUNT_WIDTH{1'b0}};
+  
   logic [7:0] wr_data_buffer;
   logic [7:0] rd_data_buffer;
   
   always_ff @(posedge clk) begin
-    wr_data_buffer <= {wr_data_buffer[6:0],1'b0};
+    if (state == IDLE && access_request) begin
+      wr_data_buffer <= command;
+    end else if (state == COMMAND && count[2:0] == 3'b111) begin
+      wr_data_buffer <= address[23:16];
+    end else if (state == ADDRESS && count[2:0] == 3'b111) begin
+      case (count[4:3])
+        2'b00 : wr_data_buffer <= address[23:16];
+        2'b01 : wr_data_buffer <= address[15:08];
+        2'b10 : wr_data_buffer <= address[07:00];
+        2'b11 : wr_data_buffer <= read_data;
+      endcase
+    end else if (state == DATA && count[2:0] == 3'b111) begin
+      wr_data_buffer <= read_data;
+    end else if (state == DATA | state == COMMAND | state == ADDRESS) begin
+      wr_data_buffer <= wr_data_buffer << 1;
+    end
   end
   
   always_ff @(posedge clk_b) begin
@@ -73,19 +89,20 @@ module spi_controller #(
     end
   end
   
+  assign mosi = wr_data_buffer[7];
   assign sclk = CPOL ? ~(clk & frame_valid) | clk & frame_valid;
   assign ssel = ~frame_valid;
   
-  assign read_address = count[COUNT_WIDTH-1:8];
+  assign read_address = count[COUNT_WIDTH-1:3] + 1;
   
-  always_ff @(posedge clk) begin
-    if (state == DATA && read_write_n) begin
-      write_enable <= 1'b1;
+  always_comb begin
+    if (state == DATA && read_write_n && count[2:0] == 3'b111) begin
+      write_enable = 1'b1;
     end else begin
-      write_enable <= 1'b0;
+      write_enable = 1'b0;
     end
-    write_address <= count[COUNT_WIDTH-1:8];
-    write_data <= rd_data_buffer;
+    write_address = count[COUNT_WIDTH-1:3];
+    write_data = {rd_data_buffer[6:0],miso};
   end
   
   always_ff @(posedge clk) begin
@@ -116,7 +133,7 @@ module spi_controller #(
           end
         end
         ADDRESS : begin
-          if (count >= {address_bytes,3'b111}) begin
+          if (count >= {6'd0,address_bytes,3'b111}) begin
             state <= dummy_valid ? DUMMY : data_valid ? DATA : DONE;
             count <= {COUNT_WIDTH{1'b0}};
           end else begin
@@ -124,7 +141,7 @@ module spi_controller #(
           end
         end
         DUMMY : begin
-          if (count >= dummy_cycles) begin
+          if (count >= {8'd0,dummy_cycles}) begin
             state <= data_valid ? DATA : DONE;
             count <= {COUNT_WIDTH{1'b0}};
           end else begin
@@ -132,7 +149,7 @@ module spi_controller #(
           end
         end
         DATA : begin
-          if (count >= data_bytes) begin
+          if (count >= {data_bytes,3'b111}) begin
             state <= DONE;
             count <= {COUNT_WIDTH{1'b0}};
           end else begin
