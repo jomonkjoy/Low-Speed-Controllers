@@ -60,6 +60,10 @@ module spi_controller_top #(
   logic [31:0] spi_if_read_data;
   logic        spi_if_access_complete;
   
+  logic [3:0]  write_byte_en;
+  
+  assign write_byte_en = write_enable ? (1 << write_address[1:0]) : 4'h0;
+  
   reset_synchronizer #(
     .SYNC_STAGE                ( SYNC_STAGE )
   ) reset_synchronizer_inst (
@@ -91,6 +95,8 @@ module spi_controller_top #(
   );
 
   spi_controller_reg spi_controller_reg_inst (
+    .clk                       ( spi_clk ) ,
+    .reset                     ( spi_reset ) ,
     .access_request            ( access_request ) ,
     .read_write_n              ( read_write_n ) ,
     .dummy_cycles              ( dummy_cycles ) ,
@@ -109,6 +115,44 @@ module spi_controller_top #(
     .cpu_if_read_data          ( spi_if_read_data ) ,
     .cpu_if_access_complete    ( spi_if_access_complete ) 
   );
+  
+  spi_controller_mem #(
+    .ADDR_WIDTH                ( $clog2(256/4) ) ,
+    .DATA_BYTES                ( 4 ) 
+  ) spi_controller_rd_buffer_inst (
+    .clka                      ( spi_clk ) ,
+    .wena                      ( write_byte_en ) ,
+    .addra                     ( write_address[7:2] ) ,
+    .dina                      ( {4{write_data}} ) ,
+    .douta                     ( ) ,
+    
+    .clkb                      ( sys_clk ) ,
+    .addrb                     ( rdb_if_address ) ,
+    .doutb                     ( rdb_if_read_data )
+  );
+  
+  always_ff @(posedge sys_clk) begin
+    rdb_if_access_complete <= rdb_if_read;
+  end
+  
+  spi_controller_mem #(
+    .ADDR_WIDTH                ( $clog2(256/4) ) ,
+    .DATA_BYTES                ( 4 ) 
+  ) spi_controller_wr_buffer_inst (
+    .clka                      ( sys_clk ) ,
+    .wena                      ( {4{wrb_if_write}} ) ,
+    .addra                     ( wrb_if_address ) ,
+    .dina                      ( wrb_if_write_data ) ,
+    .douta                     ( wrb_if_read_data ) ,
+    
+    .clkb                      ( spi_clk ) ,
+    .addrb                     ( read_address ) ,
+    .doutb                     ( read_data )
+  );
+  
+  always_ff @(posedge sys_clk) begin
+    wrb_if_access_complete <= wrb_if_read | wrb_if_write;
+  end
   
   spi_controller #(
     .CPOL                      ( CPOL )
