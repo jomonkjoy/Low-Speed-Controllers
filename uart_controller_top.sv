@@ -36,7 +36,7 @@ module uart_controller_top #(
   localparam CLK_FREQUENCY = CLK_FREQUENCY_MHZ*1000000;
   
   // clock divider logic for UART tx/rx clock
-  localparam CLKDIV_WIDTH = $clog2(CLOCK_DIVIDER);
+  localparam CLKDIV_WIDTH = $clog2(baudrate_cal(CLK_FREQUENCY,1000000));
   logic [CLKDIV_WIDTH-1:0] clk_div = {CLKDIV_WIDTH{1'b0}};
   logic [CLKDIV_WIDTH-1:0] clk_div_sel;
   logic clk_enable = 1'b0;
