@@ -106,6 +106,10 @@ module spi_controller #(
   end
   
   always_ff @(posedge clk) begin
+    access_complete <= state == DONE;
+  end
+  
+  always_ff @(posedge clk) begin
     if (reset) begin
       state <= IDLE;
       count <= {COUNT_WIDTH{1'b0}};
