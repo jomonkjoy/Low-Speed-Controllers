@@ -1,6 +1,7 @@
 module uart_controller (
   input  logic       clk,
   input  logic       reset,
+  input  logic       clk_enable,
   input  logic       parity_en,
   input  logic       rx_uart,
   output logic       tx_uart,
@@ -37,9 +38,9 @@ module uart_controller (
   assign rx_parity = ^rx_data;
   
   always_ff @(posedge clk) begin
-    if (state_tx == IDLE && tx_data_valid && tx_data_ready) begin
+    if (state_tx == IDLE && tx_data_valid && tx_data_ready && clk_enable) begin
       tx_data_buffer <= {1'b1,tx_parity,tx_data,1'b0};
-    end else if (state_tx == ACTIVE && count_tx[3:0] == 4'hF) begin
+    end else if (state_tx == ACTIVE && count_tx[3:0] == 4'hF && clk_enable) begin
       tx_data_buffer <= {1'b1,tx_data_buffer[7:1]};
     end
   end
@@ -59,7 +60,7 @@ module uart_controller (
     if (reset) begin
       state_tx <= IDLE;
       count_tx <= {COUNT_WIDTH{1'b0}};
-    end else begin
+    end else if (clk_enable) begin
       case (state_tx)
         IDLE : begin
           if (tx_data_valid && tx_data_ready) begin
@@ -87,9 +88,9 @@ module uart_controller (
   end
   
   always_ff @(posedge clk) begin
-    if (state_rx == IDLE) begin
+    if (state_rx == IDLE && clk_enable) begin
       rx_data_buffer <= {rx_uart,rx_data_buffer[10:1]};
-    end else if (state_rx == ACTIVE && count_tx[3:0] == 4'hF) begin
+    end else if (state_rx == ACTIVE && count_tx[3:0] == 4'hF && clk_enable) begin
       rx_data_buffer <= {rx_uart,rx_data_buffer[10:1]};
     end
   end
@@ -101,7 +102,7 @@ module uart_controller (
       rx_data_valid <= 1'b0;
       rx_data_error <= 1'b0;
     end else begin
-      rx_data_valid <= state_rx == DONE;
+      rx_data_valid <= state_rx == DONE && clk_enable;
       rx_data_error <= rx_parity == rx_data_buffer[9];
     end
   end
@@ -111,7 +112,7 @@ module uart_controller (
     if (reset) begin
       state_rx <= IDLE;
       count_rx <= {COUNT_WIDTH{1'b0}};
-    end else begin
+    end else if (clk_enable) begin
       case (state_rx)
         IDLE : begin
           if (rx_data_buffer == 11'hFC0) begin
