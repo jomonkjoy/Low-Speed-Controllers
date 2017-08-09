@@ -30,7 +30,7 @@ module uart_controller_top #(
   function integer baudrate_cal;
     input F_CLK, BAUD_RATE;
     integer F_CLK, BAUD_RATE;
-    baudrate_cal = F_CLK/(16∗BAUD_RATE);
+    baudrate_cal = F_CLK/(16*BAUD_RATE);
   endfunction
   
   localparam CLK_FREQUENCY = CLK_FREQUENCY_MHZ*1000000;
