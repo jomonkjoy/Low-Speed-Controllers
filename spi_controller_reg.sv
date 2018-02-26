@@ -32,7 +32,7 @@ module spi_controller_reg (
   end
   
   always_ff @(posedge clk) begin
-    if (cpu_if_write && cpu_if_address == 30'd0) begin
+    if (cpu_if_write && cpu_if_address[4:2] == 3'd0) begin
       command <= cpu_if_write_data[7:0];
       read_write_n <= cpu_if_write_data[8];
       access_request <= 1'b1;
@@ -42,27 +42,27 @@ module spi_controller_reg (
   end
   
   always_ff @(posedge clk) begin
-    if (cpu_if_write && cpu_if_address == 30'd1) begin
+    if (cpu_if_write && cpu_if_address[4:2] == 3'd1) begin
       address <= cpu_if_write_data;
     end
   end
   
   always_ff @(posedge clk) begin
-    if (cpu_if_write && cpu_if_address == 30'd2) begin
+    if (cpu_if_write && cpu_if_address[4:2] == 3'd2) begin
       address_bytes <= cpu_if_write_data[1:0];
       address_valid <= cpu_if_write_data[31];
     end
   end
   
   always_ff @(posedge clk) begin
-    if (cpu_if_write && cpu_if_address == 30'd3) begin
+    if (cpu_if_write && cpu_if_address[4:2] == 3'd3) begin
       dummy_cycles <= cpu_if_write_data[2:0];
       dummy_valid <= cpu_if_write_data[31];
     end
   end
   
   always_ff @(posedge clk) begin
-    if (cpu_if_write && cpu_if_address == 30'd4) begin
+    if (cpu_if_write && cpu_if_address[4:2] == 3'd4) begin
       data_bytes <= cpu_if_write_data[7:0];
       data_valid <= cpu_if_write_data[31];
     end
@@ -70,12 +70,12 @@ module spi_controller_reg (
   
   always_ff @(posedge clk) begin
     if (cpu_if_read) begin
-      case (cpu_if_address)
-        30'd0   : cpu_if_read_data <= {access_complete_r,22'd0,read_write_n,command};
-        30'd1   : cpu_if_read_data <= {address};
-        30'd2   : cpu_if_read_data <= {address_valid,23'd0,6'd0,address_bytes};
-        30'd3   : cpu_if_read_data <= {dummy_valid,23'd0,5'd0,dummy_cycles};
-        30'd4   : cpu_if_read_data <= {data_valid,23'd0,data_bytes};
+      case (cpu_if_address[4:2])
+        3'd0    : cpu_if_read_data <= {access_complete_r,22'd0,read_write_n,command};
+        3'd1    : cpu_if_read_data <= {address};
+        3'd2    : cpu_if_read_data <= {address_valid,23'd0,6'd0,address_bytes};
+        3'd3    : cpu_if_read_data <= {dummy_valid,23'd0,5'd0,dummy_cycles};
+        3'd4    : cpu_if_read_data <= {data_valid,23'd0,data_bytes};
         default : cpu_if_read_data <= 32'hDEADBEEF;
       endcase
     end
